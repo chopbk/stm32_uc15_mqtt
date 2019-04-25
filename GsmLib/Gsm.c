@@ -274,33 +274,48 @@ void GsmTask(void const * argument)
 	MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
 	data.clientID.cstring = "lampl";
 	topicString.cstring = "vpt";
-	char* payload = "tamnd12payload";
-	uint8_t first_time = true;
+	char payload[20];
+	uint8_t count_try_time = 0;
+	int count_payload = 0;
 	while(1)
 	{
 		//TODO: do what you want
-		if(first_time == true)
-				{
-				Gsm_MsgGetStatus();
-				do
-				{
-					GsmResult = Gsm_SocketGetStatus(CONNECT_ID);
-					if (GsmResult == STATE_CONNECTED)
-						goto contect_ok;
-					if (GsmResult != STATE_INITIAL)
-						Gsm_SocketClose(CONNECT_ID);
-					if(Gsm_SocketOpen(CONNECT_ID) == false)
-						break;
-	contect_ok:
-					if(Gsm_MqttConnect(CONNECT_ID, &data) == true)
-						break;
-					Gsm_MqttPublish(CONNECT_ID,payload, &data, topicString);
-					Gsm_MqttDisconnect(CONNECT_ID);
-					Gsm_SocketClose(CONNECT_ID);
-				} while(0);
-				first_time = false;
+		sprintf(payload,"count: %d\n",count_payload);
+		do
+		{
+			GsmResult = Gsm_SocketGetStatus(CONNECT_ID);
+			if (GsmResult == STATE_CONNECTED)
+				goto connect_ok;
+			if (GsmResult != STATE_INITIAL)
+			{
+				if(Gsm_SocketClose(CONNECT_ID) == false)
+					break;
+			}
+			if(Gsm_SocketOpen(CONNECT_ID) == false)
+				break;
+connect_ok:
+			if(Gsm_MqttConnect(CONNECT_ID, &data) == false)
+				break;
+			osDelay(1000);
+#if	DETAILED_DEBUG
+			printf("Send publish count = %d\n\r",count_payload);
+#endif
+			if(Gsm_MqttPublish(CONNECT_ID,payload, &data, topicString) == false)
+			{
+				Gsm_SocketClose(CONNECT_ID);
+				goto count_point;
+			}
+			/*if we can check MQTT CONNECT STATUS before connect_ok point
+			, we don't need to call Gsm_MqttDisconnect or Gsm_SocketClose here*/
+			//Gsm_MqttDisconnect(CONNECT_ID);
+			Gsm_SocketClose(CONNECT_ID);
+			break;
+count_point:
+			count_try_time++;
+		} while(count_try_time < 3);
+		HAL_Delay(_GSM_WAIT_TIME_LOW*3);
+		count_payload++;
 
-				}
 #if 0
 		if(Gsm.MsgStoredUsed>0)	//	sms on memory
 		{
@@ -1564,14 +1579,15 @@ bool	Gsm_GetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber)
 int Gsm_SocketGetStatus(uint8_t connectID)
 {
 	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
-	printf("Gsm_SocketGetStatus\n\r");
 	uint8_t result;
 	int state = STATE_INITIAL;
 	Gsm_RxClear();
 	do
 	{
 		sprintf((char *) Gsm.TxBuffer, "AT+QISTATE=1,%d\r\n", connectID);
-		printf("command: %s\n\r", Gsm.TxBuffer);
+#if DETAILED_DEBUG		
+		printf("command: %s ", Gsm.TxBuffer);
+#endif
 		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
 			break;
 		if (Gsm_WaitForString(_GSM_WAIT_TIME_LOW, &result, 2, "OK", "ERROR") == false)
@@ -1586,10 +1602,12 @@ int Gsm_SocketGetStatus(uint8_t connectID)
 		Gsm_RemoveChar((char *) Gsm.RxBuffer, '"');
 		Gsm_RemoveChar((char *) Gsm.RxBuffer, ' ');
 		Gsm_RemoveChar((char *) Gsm.RxBuffer, '\n');
-		Gsm_ReturnInteger((int32_t*)&state, 5, ",,");
+		Gsm_ReturnInteger((int32_t*)&state, 5, ",");
 	}
 	while(0);
-	printf("return state: %d\n\r", state);
+#if DETAILED_DEBUG
+	printf(" state: %d\n\r", state);
+#endif
 	osSemaphoreRelease(myBinarySem01Handle);
 	return state;
 }
@@ -1600,7 +1618,6 @@ int Gsm_SocketGetStatus(uint8_t connectID)
  */
 bool Gsm_SocketOpen(uint8_t connectID)
 {
-	printf("Gsm_SocketOpen\n\r");
 	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
 	uint8_t result;
 	bool	returnVal=false;
@@ -1609,10 +1626,12 @@ bool Gsm_SocketOpen(uint8_t connectID)
 	{
 		Gsm_RxClear();
 		sprintf((char *) Gsm.TxBuffer, "AT+QIOPEN=1,%d,\"TCP\",%s,%d,0,0\r\n", connectID, HOSTNAME_TCP, PORT_TCP);
+#if DETAILED_DEBUG
 		printf("command: %s\n\r",Gsm.TxBuffer);
+#endif
 		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
 			break;
-		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 2, "OK", "ERROR") == false)
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
 		{
 			break;
 		}
@@ -1695,7 +1714,6 @@ uint8_t Gsm_SocketReadData(uint8_t connectID, uint8_t * buf, uint8_t length)
  */
 bool Gsm_SocketClose(uint8_t connectID)
 {
-	printf("Gsm_SocketClose\n\r");
 	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
 	uint8_t result;
 	bool	returnVal=false;
@@ -1703,7 +1721,9 @@ bool Gsm_SocketClose(uint8_t connectID)
 	do
 	{
 		sprintf((char *) Gsm.TxBuffer, "AT+QICLOSE=%d\r\n", connectID);
+#if DETAILED_DEBUG		
 		printf("command: %s", Gsm.TxBuffer);
+#endif
 		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
 			break;
 		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 2, "OK", "ERROR") == false)
@@ -1720,14 +1740,17 @@ bool Gsm_SocketClose(uint8_t connectID)
  */
 bool Gsm_MqttConnect(uint8_t connectID, MQTTPacket_connectData *data)
 {
+#if DETAILED_DEBUG
 	printf("Gsm_MqttConnect\n\r");
+#endif
 	uint8_t buf[200];
 	uint8_t buflen = sizeof(buf);
 	uint8_t result;
 	uint8_t len;
+	/* //no need to check connection status
 	result = Gsm_SocketGetStatus(connectID);
 	if(result != STATE_CONNECTED)
-		Gsm_SocketOpen(connectID);
+		Gsm_SocketOpen(connectID); */
 	/*generate connect packet*/
 	len = MQTTSerialize_connect(buf, buflen, data);
 	/*send data*/
@@ -1739,18 +1762,21 @@ bool Gsm_MqttConnect(uint8_t connectID, MQTTPacket_connectData *data)
  */
 bool Gsm_MqttPublish(uint8_t connectID,char * payload, MQTTPacket_connectData *data,MQTTString topicString)
 {
+#if DETAILED_DEBUG
 	printf("Gsm_MqttPublish\n\r");
+#endif
 	int payloadlen = strlen(payload);
 	uint8_t buf[200];
 	uint8_t buflen = sizeof(buf);
 	uint8_t result;
 	uint8_t len;
+	/* //no need to check connection status
 	result = Gsm_SocketGetStatus(connectID);
 	if(result != STATE_CONNECTED)
 	{
 		Gsm_SocketOpen(connectID);
 		Gsm_MqttConnect(connectID, data);
-	}
+	} */
 	/*generate connect packet*/
 	len = MQTTSerialize_publish(buf, buflen, 0, 0, 0, 0, topicString, (unsigned char *) payload, payloadlen);
 	/*send data*/
@@ -1769,12 +1795,13 @@ bool Gsm_MqttSubscribe(uint8_t connectID, MQTTPacket_connectData *data,MQTTStrin
 	uint8_t len;
 	int msgid = 1;
 	int req_qos = 0;
+	/* //no need to check connection status
 	result = Gsm_SocketGetStatus(connectID);
 	if(result != STATE_CONNECTED)
 	{
 		Gsm_SocketOpen(connectID);
 		Gsm_MqttConnect(connectID, data);
-	}
+	} */
 	/*generate connect packet*/
 	len = MQTTSerialize_subscribe(buf, buflen, 0, msgid, 1, &topicString, &req_qos);
 	/*send data*/
@@ -1786,12 +1813,15 @@ bool Gsm_MqttSubscribe(uint8_t connectID, MQTTPacket_connectData *data,MQTTStrin
  */
 bool Gsm_MqttDisconnect(uint8_t connectID)
 {
+#if DETAILED_DEBUG
 	printf("Gsm_MqttDisconnect\r\n");
+#endif
 	uint8_t buf[200];
 	uint8_t buflen = sizeof(buf);
 	uint8_t result;
 	uint8_t len;
 	result = Gsm_SocketGetStatus(connectID);
+	/*if not connected, no need to send disconnect*/
 	if(result == STATE_CONNECTED)
 	{
 		/*generate Disconnect packet*/

@@ -34,6 +34,8 @@ UART_HandleTypeDef huart3;
 #define PORT_TCP 1883
 #define CONNECT_ID 0
 #define MAX_WAIT_PARAMETER 5
+#define DETAILED_DEBUG 0
+
 /*define QUECTEL_STATE*/
 #define STATE_INITIAL 0
 #define STATE_OPENING 1
