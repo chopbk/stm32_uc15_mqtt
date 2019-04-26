@@ -96,6 +96,8 @@ void Error_Handler(void);
 #define WISMO_RDY_GPIO_Port GPIOB
 #define WISMO_ON_Pin GPIO_PIN_12
 #define WISMO_ON_GPIO_Port GPIOB
+#define STA3_Pin GPIO_PIN_15
+#define STA3_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart3;

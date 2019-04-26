@@ -78,17 +78,19 @@ I2C_HandleTypeDef hi2c1;
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart3;
 
-osThreadId defaultTaskHandle;
+osThreadId defaultTaskNameHandle;
 osThreadId gsmTaskNameHandle;
 osThreadId displayTaskNameHandle;
+osThreadId LEDTaskNameHandle;
+osThreadId sttCheckRoutineHandle;
 osMessageQId datQueueHandle;
+osMessageQId ledQueueHandle;
 osSemaphoreId myBinarySem01Handle;
-
+/* USER CODE BEGIN PV */
 RINGBUF RxUart3RingBuff;
 RINGBUF RxUart1RingBuff;
 uint8_t ring3_buff[BUFF_SIZE];
 uint8_t ring1_buff[BUFF_SIZE];
-/* USER CODE BEGIN PV */
 #ifdef __GNUC__
 /* With GCC/RAISONANCE, small printf (option LD Linker->Libraries->Small printf
    set to 'Yes') calls __io_putchar() */
@@ -111,9 +113,11 @@ static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_I2C1_Init(void);
-void StartDefaultTask(void const * argument);
-void gsmTaskFunc(void const * argument);
+void defaultTask(void const * argument);
+extern void GsmTask(void const * argument);
 void displayTaskFunc(void const * argument);
+void LEDTask(void const * argument);
+extern void sttCheckRoutineTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -156,6 +160,7 @@ int main(void)
   MX_USART3_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_GPIO_WritePin(GPIOB, STA3_Pin, GPIO_PIN_SET);
 	RINGBUF_Init(&RxUart3RingBuff, ring3_buff, BUFF_SIZE);
 	RINGBUF_Init(&RxUart1RingBuff, ring1_buff, BUFF_SIZE);
 	//TODO: remove it system hang
@@ -180,12 +185,11 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the thread(s) */
-  /* definition and creation of defaultTask */
-  osThreadDef(systemcheckTask, sttCheckRoutineTask, osPriorityNormal, 0, 128);
-  defaultTaskHandle = osThreadCreate(osThread(systemcheckTask), NULL);
+  /* definition and creation of defaultTaskName */
+  osThreadDef(defaultTaskName, defaultTask, osPriorityNormal, 0, 128);
+  defaultTaskNameHandle = osThreadCreate(osThread(defaultTaskName), NULL);
 
   /* definition and creation of gsmTaskName */
-  //osThreadDef(gsmTaskName, gsmTaskFunc, osPriorityHigh, 0, 1024);
   osThreadDef(gsmTaskName, GsmTask, osPriorityNormal, 0, 1024);
   gsmTaskNameHandle = osThreadCreate(osThread(gsmTaskName), NULL);
 
@@ -193,14 +197,26 @@ int main(void)
   osThreadDef(displayTaskName, displayTaskFunc, osPriorityNormal, 0, 128);
   displayTaskNameHandle = osThreadCreate(osThread(displayTaskName), NULL);
 
+  /* definition and creation of LEDTaskName */
+  osThreadDef(LEDTaskName, LEDTask, osPriorityNormal, 0, 128);
+  LEDTaskNameHandle = osThreadCreate(osThread(LEDTaskName), NULL);
+
+  /* definition and creation of sttCheckRoutine */
+  osThreadDef(sttCheckRoutine, sttCheckRoutineTask, osPriorityNormal, 0, 128);
+  sttCheckRoutineHandle = osThreadCreate(osThread(sttCheckRoutine), NULL);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* Create the queue(s) */
   /* definition and creation of datQueue */
-  osMessageQDef(datQueue, 3, uint16_t);
+  osMessageQDef(datQueue, 3, uint32_t);
   datQueueHandle = osMessageCreate(osMessageQ(datQueue), NULL);
+
+  /* definition and creation of ledQueue */
+  osMessageQDef(ledQueue, 3, uint16_t);
+  ledQueueHandle = osMessageCreate(osMessageQ(ledQueue), NULL);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -374,7 +390,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, STA1_Pin|WISMO_RESET_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(WISMO_ON_GPIO_Port, WISMO_ON_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, WISMO_ON_Pin|STA3_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : STA1_Pin WISMO_RESET_Pin */
   GPIO_InitStruct.Pin = STA1_Pin|WISMO_RESET_Pin;
@@ -389,12 +405,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(WISMO_RDY_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : WISMO_ON_Pin */
-  GPIO_InitStruct.Pin = WISMO_ON_Pin;
+  /*Configure GPIO pins : WISMO_ON_Pin STA3_Pin */
+  GPIO_InitStruct.Pin = WISMO_ON_Pin|STA3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(WISMO_ON_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
 
@@ -402,14 +418,14 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_defaultTask */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the defaultTaskName thread.
   * @param  argument: Not used 
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void const * argument)
+/* USER CODE END Header_defaultTask */
+void defaultTask(void const * argument)
 {
 
   /* USER CODE BEGIN 5 */
@@ -419,24 +435,6 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END 5 */ 
-}
-
-/* USER CODE BEGIN Header_gsmTaskFunc */
-/**
-* @brief Function implementing the gsmTaskName thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_gsmTaskFunc */
-void gsmTaskFunc(void const * argument)
-{
-  /* USER CODE BEGIN gsmTaskFunc */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END gsmTaskFunc */
 }
 
 /* USER CODE BEGIN Header_displayTaskFunc */
@@ -464,6 +462,41 @@ void displayTaskFunc(void const * argument)
 	}
   }
   /* USER CODE END displayTaskFunc */
+}
+
+/* USER CODE BEGIN Header_LEDTask */
+/**
+* @brief Function implementing the LEDTaskName thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_LEDTask */
+void LEDTask(void const * argument)
+{
+	osEvent event;
+	uint16_t data;
+  /* USER CODE BEGIN LEDTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	  if(osMessageWaiting(ledQueueHandle)){
+		  event = osMessageGet(ledQueueHandle, 10);
+		  data = event.value.v;
+	  }
+
+	if(data & POW_FLAG){
+		osDelay(100);
+		HAL_GPIO_TogglePin(GPIOB,STA3_Pin);
+		osDelay(50);
+		HAL_GPIO_TogglePin(GPIOB,STA3_Pin);
+	} else {
+		osDelay(1000);
+		HAL_GPIO_TogglePin(GPIOB,STA3_Pin);
+		osDelay(100);
+		HAL_GPIO_TogglePin(GPIOB,STA3_Pin);
+	}
+  }
+  /* USER CODE END LEDTask */
 }
 
 /**

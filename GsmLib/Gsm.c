@@ -6,7 +6,9 @@ RINGBUF RxUart1RingBuff;
 osThreadId 		GsmTaskHandle;
 osSemaphoreId myBinarySem01Handle;
 osMessageQId datQueueHandle;
-osThreadId defaultTaskHandle;
+osThreadId sttCheckRoutineHandle;
+osMessageQId ledQueueHandle;
+osThreadId gsmTaskNameHandle;
 Gsm_t	Gsm;
 void* malloc(size_t size)
 {
@@ -258,21 +260,26 @@ void sttCheckRoutineTask(void const * argument){
 	/*Power on*/
 	bool result;
 	uint32_t data = 0x0;
-	osDelay(1000);
+	osDelay(2000);
 	result = Gsm_SetPower(true);
-	if (result == false)
+	if (result == false){
 		data &= ~POW_FLAG;
-	else data |= POW_FLAG;
+		osThreadSuspend(gsmTaskNameHandle);
+	} else {
+		osThreadResume(gsmTaskNameHandle);
+		data |= POW_FLAG;
+	}
 
 	/*TODO: Check sim status*/
 	data |= SIM_FLAG;
 
 	/*TODO: Check internet status*/
 	data |= INTERNET_FLAG;
-	osMessagePut(datQueueHandle, data, 100);
+	//osMessagePut(datQueueHandle, data, 100);
+	osMessagePut(ledQueueHandle, data, 100);
 	while(1){
-		//osDelay(3000);
-		osThreadSuspend(defaultTaskHandle);
+		osDelay(2000);
+		//osThreadSuspend(sttCheckRoutineHandle);
 		printf("POWER CHECK \r\n");
 		data = 0;
 		/*TODO: check re-power event*/
@@ -288,11 +295,15 @@ void sttCheckRoutineTask(void const * argument){
 		if (result == false){
 			result = Gsm_SetPower(true);
 			if (result == false){
+				osThreadSuspend(gsmTaskNameHandle);
 				printf("UC15 POWER FAIL\r\n");
 				data &= ~POW_FLAG;
 				goto send_message;
 			}
-		} else data |= POW_FLAG;
+		} else {
+			osThreadResume(gsmTaskNameHandle);
+			data |= POW_FLAG;
+		}
 		/*TODO: raise event POW_FLAG*/
 
 		/*TODO : check sim signal status and raise event */
@@ -301,7 +312,8 @@ void sttCheckRoutineTask(void const * argument){
 		data |= INTERNET_FLAG;
 send_message:
 if(osMessageAvailableSpace(datQueueHandle))
-		osMessagePut(datQueueHandle, data, 100);
+		//osMessagePut(datQueueHandle, data, 100);
+		osMessagePut(ledQueueHandle, data, 100);
 	}
 
 }
@@ -320,7 +332,7 @@ void GsmTask(void const * argument)
 //	osDelay(2000);
 //	Gsm_InitValue();
 	//#######################	
-	osDelay(5000);
+	//osDelay(5000);
 	//INIT CONSOLE UART
 	HAL_UART_Receive_IT(&_SR_USART,&Gsm.usart1Buff,1);
 	MQTTString topicString = MQTTString_initializer;
@@ -330,19 +342,21 @@ void GsmTask(void const * argument)
 	char payload[20];
 	uint8_t count_try_time = 0;
 	int count_payload = 0;
+	osThreadSuspend(gsmTaskNameHandle);
 	while(1)
 	{
-		printf("CHECK EVENT\r\n");
-		osThreadResume(defaultTaskHandle);
-		event = osMessageGet(datQueueHandle, 500);
-		if ( event .status == osEventMessage){
-			dataqueue = event.value.v;
-			if((dataqueue & POW_FLAG)== 0) goto power_fail;
-		}else {
-			if((dataqueue & POW_FLAG)== 0) goto power_fail;
-		}
+		//printf("CHECK EVENT\r\n");
+		//osThreadResume(sttCheckRoutineHandle);
+//		event = osMessageGet(datQueueHandle, 500);
+//		if ( event .status == osEventMessage){
+//			dataqueue = event.value.v;
+//			if((dataqueue & POW_FLAG)== 0) goto power_fail;
+//		}else {
+//			if((dataqueue & POW_FLAG)== 0) goto power_fail;
+//		}
 		printf("SEND MESSAGE\r\n");
 		//TODO: do what you want
+		count_try_time = 0;
 		sprintf(payload,"count: %d\n",count_payload);
 		do
 		{
@@ -359,7 +373,7 @@ void GsmTask(void const * argument)
 connect_ok:
 			if(Gsm_MqttConnect(CONNECT_ID, &data) == false)
 				break;
-			osDelay(1000);
+			//osDelay(1000);
 #if	DETAILED_DEBUG
 			printf("Send publish count = %d\n\r",count_payload);
 #endif
@@ -375,7 +389,7 @@ connect_ok:
 			break;
 count_point:
 			count_try_time++;
-		} while(count_try_time < 3);
+		} while(count_try_time < 1);
 power_fail:
 		HAL_Delay(_GSM_WAIT_TIME_LOW*3);
 		count_payload++;

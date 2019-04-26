@@ -53,3 +53,4 @@ dkms.conf
 TrueSTUDIO/STM32F103C8T6/.code_review_properties
 TrueSTUDIO/STM32F103C8T6/Debug/.gitignore
 TrueSTUDIO/STM32F103C8T6/Debug/.gitignore
+TrueSTUDIO/STM32F103C8T6/Debug/STM32F103C8T6.listTrueSTUDIO/STM32F103C8T6/Debug/*
