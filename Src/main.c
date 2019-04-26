@@ -99,7 +99,8 @@ uint8_t ring1_buff[BUFF_SIZE];
 
 PUTCHAR_PROTOTYPE
 {
-  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
+  //HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
+	RINGBUF_Put(&RxUart3RingBuff, ch);
   return ch;
 }
 /* USER CODE END PV */
@@ -155,9 +156,10 @@ int main(void)
   MX_USART3_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  printf("hello world\n\r");
 	RINGBUF_Init(&RxUart3RingBuff, ring3_buff, BUFF_SIZE);
 	RINGBUF_Init(&RxUart1RingBuff, ring1_buff, BUFF_SIZE);
+	//TODO: remove it system hang
+	printf("UC15 STM32\r\n");
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -179,8 +181,8 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
-  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+  osThreadDef(systemcheckTask, sttCheckRoutineTask, osPriorityNormal, 0, 128);
+  defaultTaskHandle = osThreadCreate(osThread(systemcheckTask), NULL);
 
   /* definition and creation of gsmTaskName */
   //osThreadDef(gsmTaskName, gsmTaskFunc, osPriorityHigh, 0, 1024);
@@ -197,7 +199,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* definition and creation of datQueue */
-  osMessageQDef(datQueue, 16, uint32_t);
+  osMessageQDef(datQueue, 3, uint16_t);
   datQueueHandle = osMessageCreate(osMessageQ(datQueue), NULL);
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -449,7 +451,6 @@ void displayTaskFunc(void const * argument)
   /* USER CODE BEGIN displayTaskFunc */
   /* Infinite loop */
 	uint8_t rxchar;
-	printf("task 2 is running...\r\n");
   for(;;)
   {
 	if(RINGBUF_GetFill(&RxUart3RingBuff)){

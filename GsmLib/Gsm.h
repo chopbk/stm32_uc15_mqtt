@@ -38,6 +38,11 @@ typedef	enum
 	GsmDial_NoAnswer,
 	GsmDial_Data,	
 }GsmDial_t;
+
+#define POW_FLAG                 ((uint32_t)0x0001)
+#define SIM_FLAG                 ((uint32_t)0x0002)
+#define INTERNET_FLAG            ((uint32_t)0x0004)
+
 //----------------------
 typedef	enum
 {
@@ -101,6 +106,8 @@ void	uart1_RxCallBack(void);
 void	Gsm_RxClear(void);
 void	Gsm_TxClear(void);
 void GsmTask(void const * argument);
+void sttCheckRoutineTask(void const * argument);
+bool gsmCheckPower(void);
 //###################################################################################################
 void	Gsm_Init(osPriority	Priority);
 bool	Gsm_SetPower(bool ON_or_OFF);

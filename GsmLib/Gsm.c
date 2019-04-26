@@ -5,6 +5,8 @@ RINGBUF RxUart3RingBuff;
 RINGBUF RxUart1RingBuff;
 osThreadId 		GsmTaskHandle;
 osSemaphoreId myBinarySem01Handle;
+osMessageQId datQueueHandle;
+osThreadId defaultTaskHandle;
 Gsm_t	Gsm;
 void* malloc(size_t size)
 {
@@ -254,39 +256,52 @@ void	uart1_RxCallBack(void)
 }
 void sttCheckRoutineTask(void const * argument){
 	/*Power on*/
-	bool result, POW_FLAG, SIM_FLAG, INTERNET_FLAG;
+	bool result;
+	uint32_t data = 0x0;
 	osDelay(1000);
 	result = Gsm_SetPower(true);
 	if (result == false)
-		POW_FLAG = false;
-	else POW_FLAG = true;
+		data &= ~POW_FLAG;
+	else data |= POW_FLAG;
 
 	/*TODO: Check sim status*/
-	SIM_FLAG = true;
+	data |= SIM_FLAG;
 
 	/*TODO: Check internet status*/
-	INTERNET_FLAG = true;
+	data |= INTERNET_FLAG;
+	osMessagePut(datQueueHandle, data, 100);
 	while(1){
-		osDelay(5000);
+		//osDelay(3000);
+		osThreadSuspend(defaultTaskHandle);
+		printf("POWER CHECK \r\n");
+		data = 0;
 		/*TODO: check re-power event*/
-		if(POW_FLAG == false){
-			result = Gsm_SetPower(true);
-			if (result == false){
-				POW_FLAG = false;
-				continue;
-			} else POW_FLAG = true;
-		}
+//		if(POW_FLAG == false){
+//			result = Gsm_SetPower(true);
+//			if (result == false){
+//				POW_FLAG = false;
+//				continue;
+//			} else POW_FLAG = true;
+//		}
 		/*Check Power status */
 		result = gsmCheckPower();
 		if (result == false){
-			POW_FLAG = false;
-			continue;
-		} else POW_FLAG = true;
+			result = Gsm_SetPower(true);
+			if (result == false){
+				printf("UC15 POWER FAIL\r\n");
+				data &= ~POW_FLAG;
+				goto send_message;
+			}
+		} else data |= POW_FLAG;
 		/*TODO: raise event POW_FLAG*/
 
 		/*TODO : check sim signal status and raise event */
-
+		data |= SIM_FLAG;
 		/*TODO : check host status and raise event*/
+		data |= INTERNET_FLAG;
+send_message:
+if(osMessageAvailableSpace(datQueueHandle))
+		osMessagePut(datQueueHandle, data, 100);
 	}
 
 }
@@ -297,14 +312,15 @@ void GsmTask(void const * argument)
 {
 	uint8_t GsmResult;
 	HAL_UART_Receive_IT(&_GSM_USART,&Gsm.usartBuff,1);
+	osEvent event;
+	uint32_t dataqueue;
 	Gsm_RxClear();
 	Gsm_TxClear();
-	printf("GsmTask run \r\n");
-	osDelay(2000);
-	Gsm_InitValue();
+	//printf("GsmTask run \r\n");
+//	osDelay(2000);
+//	Gsm_InitValue();
 	//#######################	
-	osDelay(1000);
-	printf("gsm task is running\r\n");
+	osDelay(5000);
 	//INIT CONSOLE UART
 	HAL_UART_Receive_IT(&_SR_USART,&Gsm.usart1Buff,1);
 	MQTTString topicString = MQTTString_initializer;
@@ -316,6 +332,16 @@ void GsmTask(void const * argument)
 	int count_payload = 0;
 	while(1)
 	{
+		printf("CHECK EVENT\r\n");
+		osThreadResume(defaultTaskHandle);
+		event = osMessageGet(datQueueHandle, 500);
+		if ( event .status == osEventMessage){
+			dataqueue = event.value.v;
+			if((dataqueue & POW_FLAG)== 0) goto power_fail;
+		}else {
+			if((dataqueue & POW_FLAG)== 0) goto power_fail;
+		}
+		printf("SEND MESSAGE\r\n");
 		//TODO: do what you want
 		sprintf(payload,"count: %d\n",count_payload);
 		do
@@ -350,6 +376,7 @@ connect_ok:
 count_point:
 			count_try_time++;
 		} while(count_try_time < 3);
+power_fail:
 		HAL_Delay(_GSM_WAIT_TIME_LOW*3);
 		count_payload++;
 
@@ -452,6 +479,8 @@ void	Gsm_Init(osPriority	Priority)
 //#########################################################################################################
 bool	Gsm_SetPower(bool ON_or_OFF)
 {
+	Gsm_RxClear();
+	Gsm_TxClear();
 	if(ON_or_OFF==false)	// Need Power OFF
 	{
 		if(HAL_GPIO_ReadPin(WISMO_RDY_GPIO_Port,WISMO_RDY_Pin)==GPIO_PIN_SET)
@@ -495,7 +524,7 @@ bool	Gsm_SetPower(bool ON_or_OFF)
 			Gsm_SendStringAndWait("AT\r\n",500);
 			Gsm_SendStringAndWait("AT\r\n",500);
 			uint8_t result;
-			if(Gsm_WaitForString(_GSM_WAIT_TIME_VERYHIGH,&result,1,"OK") == false){
+			if(Gsm_WaitForString(_GSM_WAIT_TIME_LOW,&result,1,"OK") == false){
 				Gsm.PowerState = false;
 				return false;
 			}
@@ -1706,13 +1735,17 @@ bool Gsm_SocketSendData(uint8_t connectID, uint8_t * buf, uint8_t len)
 	do
 	{
 		sprintf((char *) Gsm.TxBuffer, "AT+QISEND=%d,%d\r\n", connectID, len);
+#if DETAILED_DEBUG
+		printf("command: %s\n\r",Gsm.TxBuffer);
+#endif
 		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
 			break;
 		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 2, ">", "ERROR") == false)
 			break;
 		if (result == SECOND_PARAMETER)
 			break;
-		Gsm_RxClear();
+	//	Gsm_RxClear();
+		//osDelay(100);
 		if (Gsm_SendRaw(buf, len) == false)
 			break;
 		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 2, "SEND OK", "ERROR") == false)
