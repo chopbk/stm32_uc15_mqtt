@@ -197,7 +197,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* definition and creation of datQueue */
-  osMessageQDef(datQueue, 16, uint16_t);
+  osMessageQDef(datQueue, 16, uint32_t);
   datQueueHandle = osMessageCreate(osMessageQ(datQueue), NULL);
 
   /* USER CODE BEGIN RTOS_QUEUES */

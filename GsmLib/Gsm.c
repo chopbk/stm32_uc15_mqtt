@@ -252,6 +252,44 @@ void	uart1_RxCallBack(void)
 	RINGBUF_Put(&RxUart1RingBuff, Gsm.usart1Buff);
 	HAL_UART_Receive_IT(&_SR_USART,&Gsm.usart1Buff,1);
 }
+void sttCheckRoutineTask(void const * argument){
+	/*Power on*/
+	bool result, POW_FLAG, SIM_FLAG, INTERNET_FLAG;
+	osDelay(1000);
+	result = Gsm_SetPower(true);
+	if (result == false)
+		POW_FLAG = false;
+	else POW_FLAG = true;
+
+	/*TODO: Check sim status*/
+	SIM_FLAG = true;
+
+	/*TODO: Check internet status*/
+	INTERNET_FLAG = true;
+	while(1){
+		osDelay(5000);
+		/*TODO: check re-power event*/
+		if(POW_FLAG == false){
+			result = Gsm_SetPower(true);
+			if (result == false){
+				POW_FLAG = false;
+				continue;
+			} else POW_FLAG = true;
+		}
+		/*Check Power status */
+		result = gsmCheckPower();
+		if (result == false){
+			POW_FLAG = false;
+			continue;
+		} else POW_FLAG = true;
+		/*TODO: raise event POW_FLAG*/
+
+		/*TODO : check sim signal status and raise event */
+
+		/*TODO : check host status and raise event*/
+	}
+
+}
 //#########################################################################################################
 //#########################################################################################################
 //#########################################################################################################
@@ -259,7 +297,6 @@ void GsmTask(void const * argument)
 {
 	uint8_t GsmResult;
 	HAL_UART_Receive_IT(&_GSM_USART,&Gsm.usartBuff,1);
-
 	Gsm_RxClear();
 	Gsm_TxClear();
 	printf("GsmTask run \r\n");
@@ -469,6 +506,12 @@ bool	Gsm_SetPower(bool ON_or_OFF)
 			return true;			
 		}
 	}
+}
+
+bool gsmCheckPower(void){
+	if(HAL_GPIO_ReadPin(WISMO_RDY_GPIO_Port,WISMO_RDY_Pin)==GPIO_PIN_SET)
+		return false;
+	else return true;
 }
 //#########################################################################################################
 //#########################################################################################################
