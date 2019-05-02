@@ -474,7 +474,7 @@ void displayTaskFunc(void const * argument)
 void LEDTask(void const * argument)
 {
 	osEvent event;
-	uint16_t data;
+	uint16_t data = 0;
   /* USER CODE BEGIN LEDTask */
   /* Infinite loop */
   for(;;)

@@ -164,13 +164,15 @@ bool	Gsm_SetWhiteNumberOff(void);
 bool	Gsm_SetWhiteNumberEmpty(void);
 bool	Gsm_SetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
 bool	Gsm_GetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
+void Gsm_HandleError(uint16_t error);
+
 //###################################################################################################
 //###################################################################################################
 //##############Define TCPIP GSM function################################
 bool Gsm_SocketClose(uint8_t connectID);
 uint8_t Gsm_SocketReadData(uint8_t connectID, uint8_t * buf, uint8_t length);
 bool Gsm_SocketSendData(uint8_t connectID, uint8_t * buf, uint8_t len);
-bool Gsm_SocketOpen(uint8_t connectID);
+uint16_t Gsm_SocketOpen(uint8_t connectID);
 int Gsm_SocketGetStatus(uint8_t connectID);
 bool Gsm_MqttDisconnect(uint8_t connectID);
 bool Gsm_MqttConnect(uint8_t connectID, MQTTPacket_connectData *data);
