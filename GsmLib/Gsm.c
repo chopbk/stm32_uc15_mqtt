@@ -10,6 +10,9 @@ osThreadId sttCheckRoutineHandle;
 osMessageQId ledQueueHandle;
 osThreadId gsmTaskNameHandle;
 Gsm_t	Gsm;
+uint8_t connectID = 3;
+uint8_t count_error = 0;
+
 void* malloc(size_t size)
 {
     void* ptr = NULL;
@@ -260,7 +263,7 @@ void sttCheckRoutineTask(void const * argument){
 	/*Power on*/
 	bool result;
 	uint32_t data = 0x0;
-	osDelay(2000);
+	osDelay(10000);
 	result = Gsm_SetPower(true);
 	if (result == false){
 		data &= ~POW_FLAG;
@@ -280,7 +283,9 @@ void sttCheckRoutineTask(void const * argument){
 	while(1){
 		osDelay(2000);
 		//osThreadSuspend(sttCheckRoutineHandle);
-		printf("POWER CHECK \r\n");
+#if DETAILED_DEBUG	
+		//printf("POWER CHECK \r\n");
+#endif
 		data = 0;
 		/*TODO: check re-power event*/
 //		if(POW_FLAG == false){
@@ -296,7 +301,9 @@ void sttCheckRoutineTask(void const * argument){
 			result = Gsm_SetPower(true);
 			if (result == false){
 				osThreadSuspend(gsmTaskNameHandle);
+#if DETAILED_DEBUG					
 				printf("UC15 POWER FAIL\r\n");
+#endif
 				data &= ~POW_FLAG;
 				goto send_message;
 			}
@@ -322,7 +329,7 @@ if(osMessageAvailableSpace(datQueueHandle))
 //#########################################################################################################
 void GsmTask(void const * argument)
 {
-	uint8_t GsmResult;
+	uint16_t GsmResult;
 	HAL_UART_Receive_IT(&_GSM_USART,&Gsm.usartBuff,1);
 	osEvent event;
 	uint32_t dataqueue;
@@ -342,10 +349,11 @@ void GsmTask(void const * argument)
 	char payload[20];
 	uint8_t count_try_time = 0;
 	int count_payload = 0;
+	printf("WAIT POWER\r\n");
 	osThreadSuspend(gsmTaskNameHandle);
-	Gsm_SocketDeAct(CONNECT_ID);
+	//Gsm_SocketDeAct(CONTEXT_ID);
 	osDelay(1000);
-	Gsm_SocketAct(CONNECT_ID);
+	Gsm_SocketAct(CONTEXT_ID);
 	osDelay(500);
 	Gsm_ListActContext();
 	while(1)
@@ -359,9 +367,12 @@ void GsmTask(void const * argument)
 //		}else {
 //			if((dataqueue & POW_FLAG)== 0) goto power_fail;
 //		}
+#if DETAILED_DEBUG	
 		printf("SEND MESSAGE\r\n");
+#endif
 		//TODO: do what you want
-		count_try_time = 0;
+		if(CONNECT_ID > 11)
+			CONNECT_ID = 0;
 		sprintf(payload,"count: %d\n",count_payload);
 		do
 		{
@@ -372,20 +383,28 @@ void GsmTask(void const * argument)
 			others, execute command AT+QIDEACT to deactivate current failed GPRS context*/
 			if (GsmResult == STATE_CONNECTED)
 				goto connect_ok;
+			if (GsmResult == STATE_INITIAL)
+				goto open_socket;
 			if (GsmResult == STATE_OPENING)
 			{
-				if(Gsm_SocketClose(CONNECT_ID) == false)
-					break;
-			} else {
-				Gsm_SocketDeAct(CONNECT_ID);
-				break;
+				Gsm_SocketDeAct(CONTEXT_ID);
+				Gsm_SocketAct(CONTEXT_ID);
+			} 
+			if(Gsm_SocketClose(CONNECT_ID) == false)
+					goto count_point;
+open_socket:			
+			GsmResult = Gsm_SocketOpen(CONNECT_ID);
+			/*call gsm handle socket error*/
+			if(GsmResult != 0)
+			{
+				Gsm_HandleError(GsmResult);
+				continue;
 			}
-			if(Gsm_SocketOpen(CONNECT_ID) == false)
-				break;
+			osDelay(3000);
 connect_ok:
 			if(Gsm_MqttConnect(CONNECT_ID, &data) == false)
-				break;
-			//osDelay(1000);
+				goto count_point;
+			osDelay(3000);
 #if	DETAILED_DEBUG
 			printf("Send publish count = %d\n\r",count_payload);
 #endif
@@ -394,14 +413,15 @@ connect_ok:
 				Gsm_SocketClose(CONNECT_ID);
 				goto count_point;
 			}
+			osDelay(3000);
 			/*if we can check MQTT CONNECT STATUS before connect_ok point
 			, we don't need to call Gsm_MqttDisconnect or Gsm_SocketClose here*/
 			//Gsm_MqttDisconnect(CONNECT_ID);
 			Gsm_SocketClose(CONNECT_ID);
 			break;
 count_point:
-			count_try_time++;
-		} while(count_try_time < 1);
+			CONNECT_ID++;
+		} while(CONNECT_ID < 11);
 power_fail:
 		HAL_Delay(_GSM_WAIT_TIME_LOW*3);
 		count_payload++;
@@ -1670,7 +1690,31 @@ bool	Gsm_GetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber)
 		
 	
 }
-
+void Gsm_HandleError(uint16_t error)
+{
+	printf("error %d \n\r", error);
+	switch(error)
+	{
+		case SPECIFIED_SOCKET_INDEX_USED:
+#if DETAILED_DEBUG		
+		printf("go to SPECIFIED_SOCKET_INDEX_USED\n\r");
+#endif			
+			CONNECT_ID++;
+			break;
+		case DNS_PARSE_FAILED:
+#if DETAILED_DEBUG		
+		printf("go to DNS_PARSE_FAILED\n\r");
+#endif			
+			Gsm_SocketDeAct(CONTEXT_ID);
+			osDelay(1000);
+			Gsm_SocketAct(CONTEXT_ID);
+			osDelay(500);
+			break;
+	}
+	count_error++;
+	return;
+		
+}
 /*
  * current state of socket
  */
@@ -1714,12 +1758,12 @@ int Gsm_SocketGetStatus(uint8_t connectID)
 /*
  * This function open a socket tcp on server
  */
-bool Gsm_SocketOpen(uint8_t connectID)
+uint16_t Gsm_SocketOpen(uint8_t connectID)
 {
 	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
 	uint8_t result;
-	bool	returnVal=false;
 	uint8_t result_command[15];
+	uint16_t returnVal = -1;
 	do
 	{
 		Gsm_RxClear();
@@ -1739,10 +1783,11 @@ bool Gsm_SocketOpen(uint8_t connectID)
 		}
 		else
 		{
-			sprintf((char *) result_command, "+QIOPEN: %d,0", connectID);
+			sprintf((char *) result_command, "+QIOPEN");
 			if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 1, result_command) == false)
 				break;
-			returnVal = true;
+			Gsm_ReturnInteger((int32_t*)&returnVal, 1, ",");
+			printf("return open %d \n\r",returnVal);
 		}
 	}	while(0);
 	osSemaphoreRelease(myBinarySem01Handle);
@@ -1900,10 +1945,10 @@ bool Gsm_ListActContext()
 #endif
 		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
 			break;
-//		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
-//			break;
-//		if (result == SECOND_PARAMETER)
-//			break;
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+			break;
+		if (result == SECOND_PARAMETER)
+			break;
 		returnVal = true;
 	} while(0);
 	osSemaphoreRelease(myBinarySem01Handle);
