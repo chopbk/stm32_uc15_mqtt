@@ -164,7 +164,9 @@ bool	Gsm_SetWhiteNumberOff(void);
 bool	Gsm_SetWhiteNumberEmpty(void);
 bool	Gsm_SetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
 bool	Gsm_GetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
-void Gsm_HandleError(uint16_t error);
+bool Gsm_HandleError(uint16_t error);
+bool Gsm_ConfigureDNSServer(void);
+
 
 //###################################################################################################
 //###################################################################################################
