@@ -29,11 +29,17 @@ UART_HandleTypeDef huart3;
 
 /*tamnd12 add config for TCP SOCKET*/
 #define HOSTNAME_TCP "\"broker.hivemq.com\""
+#define PRIMARY_DNS "\"8.8.8.8\""
+#define SECOND_DNS "\"8.8.4.4\""
+
+
 /*#define HOSTNAME_TCP "\"iot.eclipse.org\""*/
 #define FIRST_PARAMETER 1
 #define SECOND_PARAMETER 2
 #define PORT_TCP 1883
 #define CONNECT_ID connectID
+#define MAX_CONNECT_ID 11
+
 #define CONTEXT_ID 1
 #define MAX_WAIT_PARAMETER 5
 #define DETAILED_DEBUG 1

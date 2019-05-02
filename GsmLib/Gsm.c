@@ -371,7 +371,7 @@ void GsmTask(void const * argument)
 		printf("SEND MESSAGE\r\n");
 #endif
 		//TODO: do what you want
-		if(CONNECT_ID > 11)
+		if(CONNECT_ID > MAX_CONNECT_ID)
 			CONNECT_ID = 0;
 		sprintf(payload,"count: %d\n",count_payload);
 		do
@@ -387,8 +387,10 @@ void GsmTask(void const * argument)
 				goto open_socket;
 			if (GsmResult == STATE_OPENING)
 			{
+Deact_Act:			
 				Gsm_SocketDeAct(CONTEXT_ID);
 				Gsm_SocketAct(CONTEXT_ID);
+				continue;
 			} 
 			if(Gsm_SocketClose(CONNECT_ID) == false)
 					goto count_point;
@@ -409,19 +411,18 @@ connect_ok:
 			printf("Send publish count = %d\n\r",count_payload);
 #endif
 			if(Gsm_MqttPublish(CONNECT_ID,payload, &data, topicString) == false)
-			{
-				Gsm_SocketClose(CONNECT_ID);
 				goto count_point;
-			}
 			osDelay(3000);
+
 			/*if we can check MQTT CONNECT STATUS before connect_ok point
 			, we don't need to call Gsm_MqttDisconnect or Gsm_SocketClose here*/
 			//Gsm_MqttDisconnect(CONNECT_ID);
 			Gsm_SocketClose(CONNECT_ID);
 			break;
 count_point:
+			Gsm_SocketClose(CONNECT_ID);
 			CONNECT_ID++;
-		} while(CONNECT_ID < 11);
+		} while(CONNECT_ID < MAX_CONNECT_ID);
 power_fail:
 		HAL_Delay(_GSM_WAIT_TIME_LOW*3);
 		count_payload++;
@@ -1690,8 +1691,9 @@ bool	Gsm_GetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber)
 		
 	
 }
-void Gsm_HandleError(uint16_t error)
+bool Gsm_HandleError(uint16_t error)
 {
+	count_error++;
 	printf("error %d \n\r", error);
 	switch(error)
 	{
@@ -1705,15 +1707,40 @@ void Gsm_HandleError(uint16_t error)
 #if DETAILED_DEBUG		
 		printf("go to DNS_PARSE_FAILED\n\r");
 #endif			
-			Gsm_SocketDeAct(CONTEXT_ID);
-			osDelay(1000);
-			Gsm_SocketAct(CONTEXT_ID);
-			osDelay(500);
+			return Gsm_ConfigureDNSServer();
 			break;
 	}
-	count_error++;
-	return;
+	return true;
 		
+}
+/*
+ * configure Address of DNS server. Hash Code DNS Google 
+ */
+bool Gsm_ConfigureDNSServer(void)
+{
+	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
+	uint8_t result;
+	bool retVal = false;
+	do
+	{	
+		sprintf((char *) Gsm.TxBuffer, "AT+QIDNSCFG=%d,%s,%s\r\n", CONTEXT_ID,PRIMARY_DNS,SECOND_DNS);
+#if DETAILED_DEBUG		
+		printf("command: %s ", Gsm.TxBuffer);
+#endif	
+if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
+			break;
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+		{
+			break;
+		}
+		if (result == SECOND_PARAMETER)
+		{
+			break;
+		}
+		retVal = true;
+	}while(0);
+	osSemaphoreRelease(myBinarySem01Handle);
+	return retVal;
 }
 /*
  * current state of socket
