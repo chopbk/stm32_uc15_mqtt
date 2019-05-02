@@ -50,7 +50,23 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+<<<<<<< HEAD
 TrueSTUDIO/STM32F103C8T6/.code_review_properties
 TrueSTUDIO/STM32F103C8T6/Debug/.gitignore
 TrueSTUDIO/STM32F103C8T6/Debug/.gitignore
 TrueSTUDIO/STM32F103C8T6/Debug/STM32F103C8T6.listTrueSTUDIO/STM32F103C8T6/Debug/*
+=======
+*.log
+*.cproject
+*.project
+*.ioc
+.mxproject
+*.xml
+.settings
+Debug
+*.s
+*.ld
+*.launch
+TrueSTUDIO\STM32F103C8T6\Debug\*
+TrueSTUDIO\STM32F103C8T6\.settings
+>>>>>>> change gitignore file, delete some file
