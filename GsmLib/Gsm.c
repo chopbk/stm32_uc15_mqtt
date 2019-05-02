@@ -343,6 +343,11 @@ void GsmTask(void const * argument)
 	uint8_t count_try_time = 0;
 	int count_payload = 0;
 	osThreadSuspend(gsmTaskNameHandle);
+	Gsm_SocketDeAct(CONNECT_ID);
+	osDelay(1000);
+	Gsm_SocketAct(CONNECT_ID);
+	osDelay(500);
+	Gsm_ListActContext();
 	while(1)
 	{
 		//printf("CHECK EVENT\r\n");
@@ -361,12 +366,19 @@ void GsmTask(void const * argument)
 		do
 		{
 			GsmResult = Gsm_SocketGetStatus(CONNECT_ID);
+			/*Current TCPIP connection status is not IP INITIAL, IP STATUS and IP CLOSE
+			*(Query by command AT+QISTAT). If current status is TCP CONNECTING, execute
+			command AT+QICLOSE to close current failed TCP connection. If current status is
+			others, execute command AT+QIDEACT to deactivate current failed GPRS context*/
 			if (GsmResult == STATE_CONNECTED)
 				goto connect_ok;
-			if (GsmResult != STATE_INITIAL)
+			if (GsmResult == STATE_OPENING)
 			{
 				if(Gsm_SocketClose(CONNECT_ID) == false)
 					break;
+			} else {
+				Gsm_SocketDeAct(CONNECT_ID);
+				break;
 			}
 			if(Gsm_SocketOpen(CONNECT_ID) == false)
 				break;
@@ -1811,15 +1823,87 @@ bool Gsm_SocketClose(uint8_t connectID)
 	do
 	{
 		sprintf((char *) Gsm.TxBuffer, "AT+QICLOSE=%d\r\n", connectID);
+#if DETAILED_DEBUG
+		printf("command: %s", Gsm.TxBuffer);
+#endif
+		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
+			break;
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+			break;
+		if (result == SECOND_PARAMETER)
+			break;
+		returnVal = true;
+	} while(0);
+	osSemaphoreRelease(myBinarySem01Handle);
+	return returnVal;
+}
+
+bool Gsm_SocketDeAct(uint8_t connectID)
+{
+	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
+	uint8_t result;
+	bool	returnVal=false;
+	Gsm_RxClear();
+	do
+	{
+		sprintf((char *) Gsm.TxBuffer, "AT+QIDEACT=%d\r\n", connectID);
 #if DETAILED_DEBUG		
 		printf("command: %s", Gsm.TxBuffer);
 #endif
 		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
 			break;
-		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 2, "OK", "ERROR") == false)
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
 			break;
 		if (result == SECOND_PARAMETER)
 			break;
+		returnVal = true;
+	} while(0);
+	osSemaphoreRelease(myBinarySem01Handle);
+	return returnVal;
+}
+
+bool Gsm_SocketAct(uint8_t connectID)
+{
+	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
+	uint8_t result;
+	bool	returnVal=false;
+	Gsm_RxClear();
+	do
+	{
+		sprintf((char *) Gsm.TxBuffer, "AT+QIACT=%d\r\n", connectID);
+#if DETAILED_DEBUG
+		printf("command: %s", Gsm.TxBuffer);
+#endif
+		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
+			break;
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+			break;
+		if (result == SECOND_PARAMETER)
+			break;
+		returnVal = true;
+	} while(0);
+	osSemaphoreRelease(myBinarySem01Handle);
+	return returnVal;
+}
+
+bool Gsm_ListActContext()
+{
+	osSemaphoreWait(myBinarySem01Handle,osWaitForever);
+	uint8_t result;
+	bool	returnVal=false;
+	Gsm_RxClear();
+	do
+	{
+		sprintf((char *) Gsm.TxBuffer, "AT+QIACT?\r\n");
+#if DETAILED_DEBUG
+		printf("command: %s", Gsm.TxBuffer);
+#endif
+		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
+			break;
+//		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+//			break;
+//		if (result == SECOND_PARAMETER)
+//			break;
 		returnVal = true;
 	} while(0);
 	osSemaphoreRelease(myBinarySem01Handle);
