@@ -39,6 +39,8 @@ UART_HandleTypeDef huart3;
 #define PORT_TCP 1883
 #define CONNECT_ID connectID
 #define MAX_CONNECT_ID 11
+#define MAX_ERROR 1
+
 
 #define CONTEXT_ID 1
 #define MAX_WAIT_PARAMETER 5
