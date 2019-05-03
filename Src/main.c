@@ -458,7 +458,7 @@ void displayTaskFunc(void const * argument)
 	if(RINGBUF_GetFill(&RxUart1RingBuff)){
 		RINGBUF_Get(&RxUart1RingBuff, &rxchar);
 		HAL_UART_Transmit(&huart3, &rxchar, 1, 0xFFFF);
-		//HAL_UART_Transmit(&huart1, &rxchar, 1, 0xFFFF);
+		HAL_UART_Transmit(&huart1, &rxchar, 1, 0xFFFF);
 	}
   }
   /* USER CODE END displayTaskFunc */

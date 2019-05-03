@@ -108,6 +108,8 @@ void	Gsm_TxClear(void);
 void GsmTask(void const * argument);
 void sttCheckRoutineTask(void const * argument);
 bool gsmCheckPower(void);
+void Gsm_SendPowerOff(void);
+
 //###################################################################################################
 void	Gsm_Init(osPriority	Priority);
 bool	Gsm_SetPower(bool ON_or_OFF);
