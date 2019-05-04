@@ -1931,6 +1931,85 @@ bool Gsm_HandleError(uint16_t error)
 
 
 /*
+ * check sim inserted
+ */
+bool Gsm_CheckSimInsertedStatus(void)
+{
+	osSemaphoreWait(myBinarySem01Handle, osWaitForever);
+	uint8_t result;
+	bool retVal = false;
+	uint16_t inserted_status = 0;
+	do 
+	{
+		sprintf((char *) Gsm.TxBuffer, "AT+QSIMSTAT?\r\n");
+
+#if DETAILED_DEBUG
+		printf("command: %s ", Gsm.TxBuffer);
+#endif
+
+		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
+			break;
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+		{
+			break;
+		}
+		if (result == SECOND_PARAMETER)
+		{
+			break;
+		}
+		Gsm_ReturnInteger((int32_t *) &inserted_status, 1, ",");
+		if (inserted_status == SIM_INSERTED)
+			retVal = true;
+	}
+	while(0);
+	osSemaphoreRelease(myBinarySem01Handle);
+	return retVal;
+}
+
+
+/*
+ * check network registration 
+ */
+bool Gsm_CheckNetworkRegistration(void)
+{
+	osSemaphoreWait(myBinarySem01Handle, osWaitForever);
+	uint8_t result;
+	bool retVal = false;
+	uint8_t result_command[15];
+	uint16_t status_network = 0;
+	do 
+	{
+		sprintf((char *) Gsm.TxBuffer, "AT+CREG?\r\n");
+
+#if DETAILED_DEBUG
+		printf("command: %s ", Gsm.TxBuffer);
+#endif
+
+		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
+			break;
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+		{
+			break;
+		}
+		if (result == SECOND_PARAMETER)
+		{
+			break;
+		}
+		sprintf((char *) result_command, "+CREG");
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 1, "+CREG") == false)
+			break;
+		Gsm_ReturnInteger((int32_t *) &status_network, 1, ",");
+		if (status_network == NETWORK_REGISTERED_HOME ||\
+				status_network == NETWORK_REGISTERED_ROAMING)
+			retVal = true;
+	}
+	while(0);
+	osSemaphoreRelease(myBinarySem01Handle);
+	return retVal;
+}
+
+
+/*
  * configure Address of DNS server. Hash Code DNS Google 
  */
 bool Gsm_ConfigureDNSServer(void)

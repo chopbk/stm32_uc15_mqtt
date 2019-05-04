@@ -164,6 +164,10 @@ bool	Gsm_SetWhiteNumberOff(void);
 bool	Gsm_SetWhiteNumberEmpty(void);
 bool	Gsm_SetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
 bool	Gsm_GetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
+
+//####################################CHECK SIM########################################
+bool Gsm_CheckSimInsertedStatus(void);
+bool Gsm_CheckNetworkRegistration(void);
 //####################################PDP CONTEXT########################################
 void Gsm_ResetPDPContext(uint8_t contextID);
 bool Gsm_DeActPDPContext(uint8_t contextID);
