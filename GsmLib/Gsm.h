@@ -109,6 +109,7 @@ void GsmTask(void const * argument);
 void sttCheckRoutineTask(void const * argument);
 bool gsmCheckPower(void);
 
+
 //###################################################################################################
 void	Gsm_Init(osPriority	Priority);
 bool	Gsm_SetPower(bool ON_or_OFF);
@@ -168,18 +169,17 @@ void Gsm_ResetPDPContext(uint8_t contextID);
 bool Gsm_DeActPDPContext(uint8_t contextID);
 bool Gsm_ActPDPContext(uint8_t contextID);
 bool Gsm_GetPDPContext();
+//####################################HANDLE########################################
+bool Gsm_ConfigureDNSServer(void);
 bool Gsm_HandleError(uint16_t error);
 void Gsm_SendPowerOff(void);
-
-
-//###################################################################################################
-//###################################################################################################
 //##############Define TCPIP GSM function################################
 bool Gsm_SocketClose(uint8_t connectID);
 uint8_t Gsm_SocketReadData(uint8_t connectID, uint8_t * buf, uint8_t length);
 bool Gsm_SocketSendData(uint8_t connectID, uint8_t * buf, uint8_t len);
 uint16_t Gsm_SocketOpen(uint8_t connectID);
 int Gsm_SocketGetStatus(uint8_t connectID);
+//##############Define MQTT GSM function################################
 bool Gsm_MqttDisconnect(uint8_t connectID);
 bool Gsm_MqttConnect(uint8_t connectID, MQTTPacket_connectData *data);
 bool Gsm_MqttPublish(uint8_t connectID,char * payload, MQTTPacket_connectData *data,MQTTString topicString);

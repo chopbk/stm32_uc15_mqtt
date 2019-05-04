@@ -342,14 +342,6 @@ void sttCheckRoutineTask(void const * argument)
 #endif
 
 		data = 0;
-		/*TODO: check re-power event*/
-		//		if(POW_FLAG == false){
-		//			result = Gsm_SetPower(true);
-		//			if (result == false){
-		//				POW_FLAG = false;
-		//				continue;
-		//			} else POW_FLAG = true;
-		//		}
 		/*Check Power status */
 		result = gsmCheckPower();
 		if (result == false)
@@ -391,16 +383,12 @@ void GsmTask(void const * argument)
 {
 	uint16_t GsmResult;
 	HAL_UART_Receive_IT(&_GSM_USART, &Gsm.usartBuff, 1);
+	/*
 	osEvent event;
 	uint32_t dataqueue;
+	*/
 	Gsm_RxClear();
 	Gsm_TxClear();
-	//printf("GsmTask run \r\n");
-	//	osDelay(2000);
-	//	Gsm_InitValue();
-	//#######################	
-	//osDelay(5000);
-	//INIT CONSOLE UART
 	HAL_UART_Receive_IT(&_SR_USART, &Gsm.usart1Buff, 1);
 	MQTTString topicString = MQTTString_initializer;
 	MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
@@ -408,18 +396,21 @@ void GsmTask(void const * argument)
 	topicString.cstring = "vpt";
 	char payload[20];
 	int count_payload = 0;
-#if DETAILED_DEBUG	
+
+#if DETAILED_DEBUG
 	printf("WAIT POWER\r\n");
 #endif
+
 	osThreadSuspend(gsmTaskNameHandle);
-	osDelay(_GSM_WAIT_TIME_MED);		
+	osDelay(_GSM_WAIT_TIME_MED);
 	if (Gsm_GetPDPContext() == false)
 	{
 		Gsm_ResetPDPContext(CONTEXT_ID);
 	}
 	while (1)
 	{
-		//osDelay(2*_GSM_WAIT_TIME_LOW);
+		/*fix time interval for send - 30s*/
+		osDelay(3 * _GSM_WAIT_TIME_MED);
 		if (CONNECT_ID > MAX_CONNECT_ID)
 			CONNECT_ID = 0;
 		count_error = 0;
@@ -449,7 +440,7 @@ void GsmTask(void const * argument)
 				continue;
 			}
 			if (Gsm_SocketClose(CONNECT_ID) == false)
-				goto count_point;
+				goto increase_connectID;
 open_socket:
 			GsmResult = Gsm_SocketOpen(CONNECT_ID);
 			/*call gsm handle socket error*/
@@ -464,15 +455,15 @@ open_socket:
 					continue;
 				}
 				Gsm_HandleError(GsmResult);
-				goto count_point;
+				goto close_point;
 				;
 			}
-			osDelay(2000);
-mqtt_connect:
+			osDelay(_GSM_WAIT_TIME_LOW);
+			/*mqtt connect*/
 			if (Gsm_MqttConnect(CONNECT_ID, &data) == false)
 				goto close_point;
 mqtt_publish:
-
+			/*mqtt publish*/
 #if DETAILED_DEBUG
 			printf("Send publish count = %d\n\r", count_payload);
 #endif
@@ -482,16 +473,15 @@ mqtt_publish:
 			/*if we can check MQTT CONNECT STATUS before mqtt_connect point
 			, we don't need to call Gsm_MqttDisconnect or Gsm_SocketClose here*/
 			//Gsm_MqttDisconnect(CONNECT_ID);
+			/*now no need to close socket*/
 			//Gsm_SocketClose(CONNECT_ID);
 			break;
 close_point:
 			Gsm_SocketClose(CONNECT_ID);
-count_point:
+increase_connectID:
 			CONNECT_ID++;
 		}
 		while(CONNECT_ID < MAX_CONNECT_ID);
-power_fail:
-		HAL_Delay(_GSM_WAIT_TIME_LOW *3);
 		count_payload++;
 
 #if 0
@@ -1903,22 +1893,25 @@ bool Gsm_GetWhiteNumber(uint8_t Index_1_to_30, char * PhoneNumber)
 	return returnVal;
 }
 
-/*tamnd12 and lampl define function start */
 
+/*tamnd12 and lampl define function start */
 /*handle Quectel error*/
 bool Gsm_HandleError(uint16_t error)
 {
 	bool retVal = false;
 	count_error++;
-#if DETAILED_DEBUG	
+
+#if DETAILED_DEBUG
 	printf("error %d \n\r", error);
 #endif
+
 	switch (error)
 	{
 		case SPECIFIED_SOCKET_INDEX_USED:
 #if DETAILED_DEBUG
 			printf("go to SPECIFIED_SOCKET_INDEX_USED\n\r");
 #endif
+
 			/*return and go to increse_connectID point*/
 			retVal = true;
 			break;
@@ -1927,6 +1920,7 @@ bool Gsm_HandleError(uint16_t error)
 #if DETAILED_DEBUG
 			printf("go to DNS_PARSE_FAILED\n\r");
 #endif
+
 			Gsm_ResetPDPContext(CONTEXT_ID);
 			retVal = Gsm_ConfigureDNSServer();
 			break;
