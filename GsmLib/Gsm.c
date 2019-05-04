@@ -315,24 +315,57 @@ void sttCheckRoutineTask(void const * argument)
 	/*Power on*/
 	bool result;
 	uint32_t data = 0x0;
-	osDelay(2000);
-	result = Gsm_SetPower(true);
-	if (result == false)
+	osDelay(_GSM_WAIT_TIME_LOW*2);
+	while (1)
 	{
-		data &= ~POW_FLAG;
-		osThreadSuspend(gsmTaskNameHandle);
+		data = 0;
+		/*Check Power status */
+		result = gsmCheckPower();
+		if (result == false)
+		{
+			result = Gsm_SetPower(true);
+			if (result == false)
+			{
+				data &= ~POW_FLAG;
+				osThreadSuspend(gsmTaskNameHandle);
+			}
+			else 
+				goto check_sim_inserted;
+		}
+		else 
+		{
+check_sim_inserted:
+			osDelay(_GSM_WAIT_TIME_MED);
+			data |= POW_FLAG;
+			result = Gsm_CheckSimInsertedStatus();
+			if (result == false)
+			{
+				data &= ~SIM_FLAG;
+				osThreadSuspend(gsmTaskNameHandle);
+			}
+			else 
+			{
+Check_Network_Registration:
+				osDelay(_GSM_WAIT_TIME_MED);
+				data |= SIM_FLAG;
+				result = Gsm_CheckNetworkRegistration();
+				if (result == false)
+				{
+					data &= ~INTERNET_FLAG;
+					osThreadSuspend(gsmTaskNameHandle);
+				}
+				else 
+				{
+					data |= INTERNET_FLAG;
+					osThreadResume(gsmTaskNameHandle);
+				}
+			}
+		}
+		if (osMessageAvailableSpace(datQueueHandle))
+			osMessagePut(ledQueueHandle, data, 100);
+		/*will check quectel status in 3 seconds*/
+		osDelay(3 * _GSM_WAIT_TIME_LOW);
 	}
-	else 
-	{
-		osThreadResume(gsmTaskNameHandle);
-		data |= POW_FLAG;
-	}
-	/*TODO: Check sim status*/
-	data |= SIM_FLAG;
-	/*TODO: Check internet status*/
-	data |= INTERNET_FLAG;
-	//osMessagePut(datQueueHandle, data, 100);
-	osMessagePut(ledQueueHandle, data, 100);
 	while (1)
 	{
 		osDelay(2000);
