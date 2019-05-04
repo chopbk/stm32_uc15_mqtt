@@ -315,24 +315,79 @@ void sttCheckRoutineTask(void const * argument)
 	/*Power on*/
 	bool result;
 	uint32_t data = 0x0;
-	osDelay(2000);
-	result = Gsm_SetPower(true);
-	if (result == false)
+	osDelay(_GSM_WAIT_TIME_LOW*2);
+	uint8_t count_check_network = 0;
+	while (1)
 	{
-		data &= ~POW_FLAG;
+		osDelay(3 * _GSM_WAIT_TIME_LOW);
+		data = 0;
+		/*Check Power status */
+		result = gsmCheckPower();
+		if (result == false)
+		{
+			result = Gsm_SetPower(true);
+			if (result == false)
+			{
+				data &= ~POW_FLAG;
+				goto suspend_gsm_task;
+			}
+			else 
+			{
+				osDelay(2 * _GSM_WAIT_TIME_LOW);
+				goto check_sim_inserted;
+			}
+		}
+		else 
+		{
+check_sim_inserted:
+			osDelay(_GSM_WAIT_TIME_MED);
+#if DETAILED_DEBUG			
+			printf("check_sim_inserted\n\r");
+#endif
+			data |= POW_FLAG;
+			result = Gsm_CheckSimInsertedStatus();
+			if (result == false)
+			{
+				/*TODO need power off?? */
+				data &= ~SIM_FLAG;
+				Gsm_SetPower(false);
+				goto suspend_gsm_task;
+			}
+			else 
+			{
+ 				count_check_network = 0;
+Check_Network_Registration:
+				count_check_network++;
+#if DETAILED_DEBUG				
+				printf("Check_Network_Registration %d\n\r",count_check_network);				
+#endif
+				osDelay(_GSM_WAIT_TIME_MED);
+				data |= SIM_FLAG;
+				result = Gsm_CheckNetworkRegistration();
+				if (result == false)
+				{
+					data &= ~INTERNET_FLAG;
+					osThreadSuspend(gsmTaskNameHandle);
+					if(count_check_network < 3)
+					  goto Check_Network_Registration;
+					else 
+					  goto send_data_queue;
+				}
+				else 
+				{
+					data |= INTERNET_FLAG;
+					osThreadResume(gsmTaskNameHandle);
+					goto send_data_queue;
+				}
+			}
+		}
+suspend_gsm_task:
 		osThreadSuspend(gsmTaskNameHandle);
+send_data_queue:		
+		if (osMessageAvailableSpace(datQueueHandle))
+			osMessagePut(ledQueueHandle, data, 100);		
 	}
-	else 
-	{
-		osThreadResume(gsmTaskNameHandle);
-		data |= POW_FLAG;
-	}
-	/*TODO: Check sim status*/
-	data |= SIM_FLAG;
-	/*TODO: Check internet status*/
-	data |= INTERNET_FLAG;
-	//osMessagePut(datQueueHandle, data, 100);
-	osMessagePut(ledQueueHandle, data, 100);
+#if 0
 	while (1)
 	{
 		osDelay(2000);
@@ -373,6 +428,7 @@ send_message:
 		if (osMessageAvailableSpace(datQueueHandle)) //osMessagePut(datQueueHandle, data, 100);
 			osMessagePut(ledQueueHandle, data, 100);
 	}
+#endif
 }
 
 
@@ -1939,6 +1995,7 @@ bool Gsm_CheckSimInsertedStatus(void)
 	uint8_t result;
 	bool retVal = false;
 	uint16_t inserted_status = 0;
+	Gsm_RxClear();
 	do 
 	{
 		sprintf((char *) Gsm.TxBuffer, "AT+QSIMSTAT?\r\n");
@@ -1977,6 +2034,7 @@ bool Gsm_CheckNetworkRegistration(void)
 	bool retVal = false;
 	uint8_t result_command[15];
 	uint16_t status_network = 0;
+	Gsm_RxClear();
 	do 
 	{
 		sprintf((char *) Gsm.TxBuffer, "AT+CREG?\r\n");
@@ -1987,7 +2045,7 @@ bool Gsm_CheckNetworkRegistration(void)
 
 		if (Gsm_SendString((char *) Gsm.TxBuffer) == false)
 			break;
-		if (Gsm_WaitForString(_GSM_WAIT_TIME_MED, &result, 2, "OK", "ERROR") == false)
+		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 2, "OK", "ERROR") == false)
 		{
 			break;
 		}
@@ -1998,7 +2056,9 @@ bool Gsm_CheckNetworkRegistration(void)
 		sprintf((char *) result_command, "+CREG");
 		if (Gsm_WaitForString(_GSM_WAIT_TIME_HIGH, &result, 1, "+CREG") == false)
 			break;
+		Gsm_RemoveChar((char *) Gsm.RxBuffer, '\n');			
 		Gsm_ReturnInteger((int32_t *) &status_network, 1, ",");
+		printf("status_network %d\n\r",status_network);
 		if (status_network == NETWORK_REGISTERED_HOME ||\
 				status_network == NETWORK_REGISTERED_ROAMING)
 			retVal = true;
