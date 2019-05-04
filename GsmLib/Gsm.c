@@ -407,17 +407,15 @@ void GsmTask(void const * argument)
 	data.clientID.cstring = "lampl";
 	topicString.cstring = "vpt";
 	char payload[20];
-	bool still_connected = false;
 	int count_payload = 0;
+#if DETAILED_DEBUG	
 	printf("WAIT POWER\r\n");
+#endif
 	osThreadSuspend(gsmTaskNameHandle);
 	osDelay(_GSM_WAIT_TIME_MED);		
-	if (Gsm_ListActContext() == false)
+	if (Gsm_GetPDPContext() == false)
 	{
-		Gsm_SocketDeAct(CONTEXT_ID);
-		osDelay(_GSM_WAIT_TIME_LOW);	
-		Gsm_SocketAct(CONTEXT_ID);
-		osDelay(_GSM_WAIT_TIME_LOW);	
+		Gsm_ResetPDPContext(CONTEXT_ID);
 	}
 	while (1)
 	{
@@ -428,7 +426,6 @@ void GsmTask(void const * argument)
 		sprintf(payload, "count: %d\n", count_payload);
 		do 
 		{
-			still_connected = false;
 			GsmResult = Gsm_SocketGetStatus(CONNECT_ID);
 			/*Current TCPIP connection status is not IP INITIAL, IP STATUS and IP CLOSE
 			*(Query by command AT+QISTAT). If current status is TCP CONNECTING, execute
@@ -442,15 +439,13 @@ void GsmTask(void const * argument)
 				goto open_socket;
 			if (GsmResult == STATE_OPENING)
 			{
-				Gsm_SocketDeAct(CONTEXT_ID);
-				osDelay(_GSM_WAIT_TIME_LOW);
-				Gsm_SocketAct(CONTEXT_ID);
+				Gsm_ResetPDPContext(CONTEXT_ID);
 				continue;
 			}
 			if (GsmResult == STATE_ERROR)
 			{
 				/*some error, need to wait sim start SUCCESSfully*/
-				//osDelay(_GSM_WAIT_TIME_MED);
+				osDelay(_GSM_WAIT_TIME_MED);
 				continue;
 			}
 			if (Gsm_SocketClose(CONNECT_ID) == false)
@@ -1908,19 +1903,23 @@ bool Gsm_GetWhiteNumber(uint8_t Index_1_to_30, char * PhoneNumber)
 	return returnVal;
 }
 
+/*tamnd12 and lampl define function start */
 
+/*handle Quectel error*/
 bool Gsm_HandleError(uint16_t error)
 {
 	bool retVal = false;
 	count_error++;
+#if DETAILED_DEBUG	
 	printf("error %d \n\r", error);
+#endif
 	switch (error)
 	{
 		case SPECIFIED_SOCKET_INDEX_USED:
 #if DETAILED_DEBUG
 			printf("go to SPECIFIED_SOCKET_INDEX_USED\n\r");
 #endif
-
+			/*return and go to increse_connectID point*/
 			retVal = true;
 			break;
 
@@ -1928,9 +1927,7 @@ bool Gsm_HandleError(uint16_t error)
 #if DETAILED_DEBUG
 			printf("go to DNS_PARSE_FAILED\n\r");
 #endif
-			Gsm_SocketDeAct(CONTEXT_ID);
-			osDelay(_GSM_WAIT_TIME_LOW);
-			Gsm_SocketAct(CONTEXT_ID);
+			Gsm_ResetPDPContext(CONTEXT_ID);
 			retVal = Gsm_ConfigureDNSServer();
 			break;
 	}
@@ -2165,8 +2162,21 @@ bool Gsm_SocketClose(uint8_t connectID)
 	return returnVal;
 }
 
+/*
+ * This function reset PDP Context
+ */
+void Gsm_ResetPDPContext(uint8_t contextID)
+{
+	Gsm_DeActPDPContext(contextID);
+	osDelay(_GSM_WAIT_TIME_LOW);	
+	Gsm_ActPDPContext(contextID);
+	osDelay(_GSM_WAIT_TIME_LOW);
+}
 
-bool Gsm_SocketDeAct(uint8_t connectID)
+/*
+ * This function deactive PDP Context
+ */
+bool Gsm_DeActPDPContext(uint8_t contextID)
 {
 	osSemaphoreWait(myBinarySem01Handle, osWaitForever);
 	uint8_t result;
@@ -2193,8 +2203,10 @@ bool Gsm_SocketDeAct(uint8_t connectID)
 	return returnVal;
 }
 
-
-bool Gsm_SocketAct(uint8_t connectID)
+/*
+ * This function active PDP Context
+ */
+bool Gsm_ActPDPContext(uint8_t contextID)
 {
 	osSemaphoreWait(myBinarySem01Handle, osWaitForever);
 	uint8_t result;
@@ -2221,8 +2233,10 @@ bool Gsm_SocketAct(uint8_t connectID)
 	return returnVal;
 }
 
-
-bool Gsm_ListActContext()
+/*
+ * This function get status of PDP Context
+ */
+bool Gsm_GetPDPContext()
 {
 	osSemaphoreWait(myBinarySem01Handle, osWaitForever);
 	uint8_t result;
@@ -2361,6 +2375,7 @@ bool Gsm_MqttDisconnect(uint8_t connectID)
 	}
 	return true;
 }
+/*tamnd12 and lampl define function end */
 
 
 //#########################################################################################################

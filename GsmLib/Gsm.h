@@ -108,7 +108,6 @@ void	Gsm_TxClear(void);
 void GsmTask(void const * argument);
 void sttCheckRoutineTask(void const * argument);
 bool gsmCheckPower(void);
-void Gsm_SendPowerOff(void);
 
 //###################################################################################################
 void	Gsm_Init(osPriority	Priority);
@@ -155,9 +154,7 @@ bool	Gsm_MsgSetTeCharacterset(char *GsmMsgTeCharacterSet);
 bool	Gsm_MsgGetTeCharacterset(void);
 bool	Gsm_MsgRestoreSettings(uint8_t selectProfile_0_to_3);
 bool	Gsm_MsgSaveSettings(uint8_t selectProfile_0_to_3);
-bool Gsm_SocketDeAct(uint8_t connectID);
-bool Gsm_SocketAct(uint8_t connectID);
-bool Gsm_ListActContext();
+
 #if (_GSM_DUAL_SIM_SUPPORT==1)
 bool	Gsm_MsgGetSmsServiceCenterDS(void);
 #endif
@@ -166,8 +163,13 @@ bool	Gsm_SetWhiteNumberOff(void);
 bool	Gsm_SetWhiteNumberEmpty(void);
 bool	Gsm_SetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
 bool	Gsm_GetWhiteNumber(uint8_t	Index_1_to_30,char *PhoneNumber);
+//####################################PDP CONTEXT########################################
+void Gsm_ResetPDPContext(uint8_t contextID);
+bool Gsm_DeActPDPContext(uint8_t contextID);
+bool Gsm_ActPDPContext(uint8_t contextID);
+bool Gsm_GetPDPContext();
 bool Gsm_HandleError(uint16_t error);
-bool Gsm_ConfigureDNSServer(void);
+void Gsm_SendPowerOff(void);
 
 
 //###################################################################################################
